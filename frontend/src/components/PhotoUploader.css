@@ -1,0 +1,159 @@
+/* frontend/src/components/PhotoUploader.css */
+.photo-uploader {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.upload-area {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 60px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background-color: #f9f9f9;
+}
+
+.upload-area:hover {
+  border-color: #007bff;
+  background-color: #f0f8ff;
+}
+
+.upload-placeholder {
+  color: #666;
+}
+
+.upload-placeholder p {
+  margin: 10px 0;
+}
+
+.preview-container {
+  margin: 20px 0;
+}
+
+.image-preview {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.clear-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.upload-btn, .secondary-btn, .view-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.upload-btn {
+  background-color: #007bff;
+  color: white;
+  flex: 1;
+}
+
+.upload-btn:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.upload-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondary-btn {
+  background-color: #6c757d;
+  color: white;
+}
+
+.secondary-btn:hover {
+  background-color: #545b62;
+}
+
+.error-message {
+  background-color: #ffebee;
+  color: #c62828;
+  padding: 12px;
+  border-radius: 4px;
+  margin: 20px 0;
+}
+
+.result-card {
+  border: 2px solid;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.result-card.matched {
+  border-color: #4caf50;
+  background-color: #f1f8e9;
+}
+
+.result-card.created {
+  border-color: #2196f3;
+  background-color: #e3f2fd;
+}
+
+.result-card.found_external {
+  border-color: #ff9800;
+  background-color: #fff3e0;
+}
+
+.result-card h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.event-info p {
+  margin: 8px 0;
+}
+
+.event-info strong {
+  color: #555;
+}
+
+.event-actions {
+  margin-top: 20px;
+}
+
+.view-btn {
+  background-color: #28a745;
+  color: white;
+  padding: 8px 16px;
+}
+
+.view-btn:hover {
+  background-color: #218838;
+}

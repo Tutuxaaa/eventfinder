@@ -1,14 +1,24 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text
+# api/models/event.py (пример полей)
+from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, Boolean
+from sqlalchemy.sql import func
 from database import Base
-from datetime import datetime, timezone
 
 class Event(Base):
     __tablename__ = "events"
-
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(255), index=True)
-    description = Column(Text)
-    date = Column(DateTime)
-    location = Column(String(255))
-    image_url = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    date = Column(DateTime, nullable=True)
+    location = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
+    image_hash = Column(String(64), nullable=True)   # hex pHash
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    price = Column(String(50), nullable=True)
+    category = Column(String(100), nullable=True)
+    is_favorite = Column(Boolean, default=False)
+    raw_text = Column(Text, nullable=True)
+    parsed_by_ai = Column(Boolean, default=False)
+    source_url = Column(String, nullable=True)
+    
+        # new: owner
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
