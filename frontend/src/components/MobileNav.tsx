@@ -1,15 +1,20 @@
-import { Home, Search, Heart } from "lucide-react";
+import { Globe, Heart, Home, LayoutDashboard, Search, ShieldCheck } from "lucide-react";
+import { NavLink } from "react-router-dom";
+import type { UserRole } from "../types";
 
 interface MobileNavProps {
-  currentView: string;
-  onNavigate: (view: string) => void;
+  isAuthenticated: boolean;
+  role?: UserRole;
 }
 
-export function MobileNav({ currentView, onNavigate }: MobileNavProps) {
+export function MobileNav({ isAuthenticated, role }: MobileNavProps) {
   const navItems = [
-    { id: "home", icon: Home, label: "Главная" },
-    { id: "feed", icon: Search, label: "События" },
-    { id: "favorites", icon: Heart, label: "Избранное" },
+    { to: "/", icon: Home, label: "Главная", end: true },
+    { to: "/discover", icon: Globe, label: "Каталог" },
+    { to: "/events", icon: Search, label: "События" },
+    { to: "/favorites", icon: Heart, label: "Избранное" },
+    ...(isAuthenticated ? [{ to: "/dashboard", icon: LayoutDashboard, label: "Кабинет" }] : []),
+    ...(role === "admin" ? [{ to: "/admin/users", icon: ShieldCheck, label: "Роли" }] : []),
   ];
 
   return (
@@ -17,19 +22,15 @@ export function MobileNav({ currentView, onNavigate }: MobileNavProps) {
       <div className="flex items-center justify-around px-4 py-3">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = currentView === item.id;
-          
           return (
-            <button
-              key={item.id}
-              onClick={() => onNavigate(item.id)}
-              className={`flex flex-col items-center gap-1 transition-colors ${
-                isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Icon className="h-5 w-5" />
-              <span className="text-xs">{item.label}</span>
-            </button>
+            <NavLink key={item.to} to={item.to} end={item.end}>
+              {({ isActive }) => (
+                <div className={`flex flex-col items-center gap-1 transition-colors ${isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                  <Icon className="h-5 w-5" />
+                  <span className="text-xs">{item.label}</span>
+                </div>
+              )}
+            </NavLink>
           );
         })}
       </div>

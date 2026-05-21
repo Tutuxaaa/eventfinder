@@ -2,9 +2,10 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import type { EventDto, EventListResponse } from "../types";
 
 export function useEvents() {
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState<EventDto[]>([]);
   const { user, loading } = useAuth();
 
   useEffect(() => {
@@ -15,7 +16,7 @@ export function useEvents() {
       return;
     }
     apiFetch("/events/")
-      .then((data) => { if (mounted) setItems(data); })
+      .then((data: EventListResponse) => { if (mounted) setItems(data.items); })
       .catch((err) => {
         console.error(err);
         // if 401, logout will be handled in global caller; optionally clear items

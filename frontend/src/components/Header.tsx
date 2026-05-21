@@ -1,17 +1,11 @@
-import { Camera, User, LogOut } from "lucide-react"; // Добавили иконку LogOut
+import { Camera, LogOut, Shield, User } from "lucide-react";
 import { Button } from "./ui/button";
-
-// Описываем тип пользователя, совпадающий с AuthContext
-interface UserType {
-  id: number;
-  email: string;
-  name?: string;
-}
+import type { UserDto } from "../types";
 
 interface HeaderProps {
   onAuthClick: () => void;
-  user: UserType | null; // Принимаем объект пользователя или null
-  onLogout: () => void;  // Функция для выхода
+  user: UserDto | null;
+  onLogout: () => Promise<void>;
 }
 
 export function Header({ onAuthClick, user, onLogout }: HeaderProps) {
@@ -24,28 +18,25 @@ export function Header({ onAuthClick, user, onLogout }: HeaderProps) {
           </div>
           <div>
             <h1 className="leading-none">EventFinder</h1>
-            <p className="text-xs text-muted-foreground hidden sm:block">Найди событие по фото</p>
+            <p className="hidden text-xs text-muted-foreground sm:block">Event catalog with RBAC, tokens and object storage</p>
           </div>
         </div>
 
-        {/* --- ЛОГИКА ОТОБРАЖЕНИЯ --- */}
         {user ? (
-          // ЕСЛИ ПОЛЬЗОВАТЕЛЬ ЗАЛОГИНЕН
           <div className="flex items-center gap-4">
-            <div className="flex flex-col items-end">
-              <span className="text-sm font-medium leading-none">
-                {user.name || "Пользователь"}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {user.email}
-              </span>
+            <div className="hidden items-center gap-2 rounded-full border px-3 py-1 text-xs md:flex">
+              <Shield className="h-3.5 w-3.5 text-primary" />
+              <span className="uppercase tracking-wide text-muted-foreground">{user.role}</span>
             </div>
-            <Button variant="ghost" size="icon" onClick={onLogout} title="Выйти">
+            <div className="flex flex-col items-end">
+              <span className="text-sm font-medium leading-none">{user.name || "Пользователь"}</span>
+              <span className="text-xs text-muted-foreground">{user.email}</span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => void onLogout()} title="Выйти">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
         ) : (
-          // ЕСЛИ ПОЛЬЗОВАТЕЛЬ НЕ ЗАЛОГИНЕН
           <Button onClick={onAuthClick} className="bg-primary hover:bg-primary/90">
             <User className="mr-2 h-4 w-4" />
             Войти

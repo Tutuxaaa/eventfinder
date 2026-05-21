@@ -1,163 +1,218 @@
-import { useState, useEffect } from "react";
-import { Header } from "./components/Header";
-import { Sidebar } from "./components/Sidebar";
-import { MobileNav } from "./components/MobileNav";
-import { Onboarding } from "./components/Onboarding";
-import { HomePage } from "./components/HomePage";
-import { EventFeed } from "./components/EventFeed";
-import { Favorites } from "./components/Favorites";
-import { EventDetail } from "./components/EventDetail";
-import { PhotoSearch } from "./components/PhotoSearch";
-import { AuthDialog } from "./components/AuthDialog";
-import { Event } from "./components/EventCard";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence } from "motion/react";
+import { Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { AuthDialog } from "./components/AuthDialog";
+import { AdminUsers } from "./components/AdminUsers";
+import { DiscoverPage } from "./components/DiscoverPage";
+import { EventDetail } from "./components/EventDetail";
+import { EventFeed } from "./components/EventFeed";
+import { EventFilesPanel } from "./components/EventFilesPanel";
+import { EventLocationInsights } from "./components/EventLocationInsights";
+import { Favorites } from "./components/Favorites";
+import { Header } from "./components/Header";
+import { HomePage } from "./components/HomePage";
+import { ManageEvents } from "./components/ManageEvents";
+import { MobileNav } from "./components/MobileNav";
+import { NotFoundPage } from "./components/NotFoundPage";
+import { Onboarding } from "./components/Onboarding";
+import { PhotoSearch } from "./components/PhotoSearch";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { PublicEventDetailPage } from "./components/PublicEventDetailPage";
+import { Seo } from "./components/Seo";
+import { Sidebar } from "./components/Sidebar";
+import { eventsApi, mapEventToCard } from "./api";
+import type { EventDto, EventFormData } from "./api";
 import { useAuth } from "./context/AuthContext";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
+function EmptyState({ title, description, ctaLabel, onAction }: { title: string; description: string; ctaLabel?: string; onAction?: () => void }) {
+  return (
+    <div className="container mx-auto px-4 py-16">
+      <div className="rounded-3xl border bg-card p-10 text-center shadow-sm">
+        <h2 className="mb-3">{title}</h2>
+        <p className="mx-auto max-w-2xl text-muted-foreground">{description}</p>
+        {ctaLabel && onAction && (
+          <button onClick={onAction} className="mt-6 inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground">
+            {ctaLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function canManageEvent(user: { id: number; role: string } | null, event: EventDto | null) {
+  if (!user || !event) return false;
+  return event.owner_id === user.id || user.role === "manager" || user.role === "admin";
+}
+
+function EventDetailRoute({
+  seedEvents,
+  currentUser,
+  onFavoriteToggle,
+}: {
+  seedEvents: EventDto[];
+  currentUser: { id: number; role: string } | null;
+  onFavoriteToggle: (eventId: string) => Promise<void>;
+}) {
+  const { eventId } = useParams();
+  const navigate = useNavigate();
+  const [event, setEvent] = useState<EventDto | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      const id = Number(eventId);
+      const seeded = seedEvents.find((item) => item.id === id);
+      if (seeded) {
+        setEvent(seeded);
+        setLoading(false);
+        return;
+      }
+      try {
+        const fetched = await eventsApi.getById(id);
+        if (!ignore) setEvent(fetched);
+      } catch {
+        if (!ignore) setEvent(null);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [eventId, seedEvents]);
+
+  if (loading) {
+    return <EmptyState title="Загрузка события" description="Получаем карточку события и его вложения." />;
+  }
+
+  if (!event) {
+    return <EmptyState title="Событие не найдено" description="Проверьте ссылку или вернитесь в каталог." ctaLabel="К каталогу" onAction={() => navigate("/events")} />;
+  }
+
+  const mapped = mapEventToCard(event);
+  const similarEvents = seedEvents
+    .filter((item) => item.id !== event.id && item.category === event.category)
+    .slice(0, 3)
+    .map(mapEventToCard);
+
+  return (
+    <>
+      <Seo title={`${event.title} — EventFinder`} description={event.description || "Закрытая карточка события"} robots="noindex,nofollow" canonicalPath={`/events/${event.id}`} />
+      <EventDetail
+        event={mapped}
+        similarEvents={similarEvents}
+        onBack={() => navigate(-1)}
+        onFavoriteToggle={() => void onFavoriteToggle(String(event.id))}
+        onSimilarEventClick={(id) => navigate(`/events/${id}`)}
+        onSimilarFavoriteToggle={(id) => void onFavoriteToggle(id)}
+        filesSlot={<><EventLocationInsights location={event.location} /><EventFilesPanel eventId={event.id} canManage={canManageEvent(currentUser, event)} /></>}
+      />
+    </>
+  );
+}
 
 export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(true);
-  const [currentView, setCurrentView] = useState("home");
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [showPhotoSearch, setShowPhotoSearch] = useState(false);
   const [showAuthDialog, setShowAuthDialog] = useState(false);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<EventDto[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
 
-  // Хук ДОЛЖЕН быть вызван ВНУТРИ компонента
-  const { user, logout, loading: authLoading } = useAuth();
+  const { user, logout, loading: authLoading, isAuthenticated, hasRole } = useAuth();
+  const navigate = useNavigate();
 
-  // Добавьте для отладки:
-  console.log('User object in App:', user);
-  console.log('User name:', user?.name);
-  console.log('User email:', user?.email);
-
-  // onboarding
   useEffect(() => {
     const hasSeen = localStorage.getItem("hasSeenOnboarding");
     if (hasSeen) setShowOnboarding(false);
-    console.log("App - Auth state:", { user, authLoading });
-  }, [user, authLoading]);
+  }, []);
 
-  // Проверка авторизации
+  const loadEvents = async () => {
+    if (!user) {
+      setEvents([]);
+      return;
+    }
+    setLoadingEvents(true);
+    try {
+      const response = await eventsApi.getAll({
+        page: 1,
+        page_size: 50,
+        scope: hasRole("manager", "admin") ? "all" : "mine",
+      });
+      setEvents(response.items);
+    } catch (error) {
+      console.error("Не удалось загрузить события", error);
+      setEvents([]);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
   useEffect(() => {
-    if (authLoading) {
-      console.log("Auth is loading...");
-    } else {
-      console.log("Auth loaded. User:", user);
+    if (!authLoading) {
+      void loadEvents();
     }
   }, [authLoading, user]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/v1/events/`);
-        const data = await res.json();
+  const cardEvents = useMemo(() => events.map(mapEventToCard), [events]);
+  const favoriteEvents = useMemo(() => cardEvents.filter((event) => event.isFavorite), [cardEvents]);
 
-        // ПРОВЕРКА: Если бэкенд использует пагинацию, данные лежат в data.results
-        // Если пагинации нет, данные — это сам data.
-        const rawEvents = Array.isArray(data) ? data : (data.results || []);
+  const handleCreate = async (payload: EventFormData) => {
+    await eventsApi.create(payload);
+    await loadEvents();
+  };
 
-        if (!Array.isArray(rawEvents)) {
-          console.error("Бэкенд вернул странный формат данных:", data);
-          return;
-        }
+  const handleUpdate = async (eventId: string, payload: EventFormData) => {
+    await eventsApi.update(Number(eventId), payload);
+    await loadEvents();
+  };
 
-        const mapped: Event[] = rawEvents.map((e: any) => {
-          const dateObj = new Date(e.date);
-          return {
-            id: String(e.id),
-            title: e.title,
-            date: dateObj.toLocaleDateString("ru-RU"),
-            time: dateObj.toLocaleTimeString("ru-RU", {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            location: e.location ?? "",
-            price: e.price ?? "—",
-            category: e.category ?? "Другое",
-            image: e.image_url || "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4",
-            isFavorite: e.is_favorite ?? false,
-          };
-        });
+  const handleDelete = async (eventId: string) => {
+    await eventsApi.delete(Number(eventId));
+    await loadEvents();
+  };
 
-        setEvents(mapped);
-      } catch (err) {
-        console.error("Ошибка загрузки событий:", err);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const handleFavoriteToggle = async (eventId: string) => {
+    const current = events.find((event) => String(event.id) === eventId);
+    if (!current) return;
+    await eventsApi.toggleFavorite(current.id, !(current.is_favorite ?? false));
+    await loadEvents();
+  };
+
+  const handleExternalEvent = async (externalEvent: any) => {
+    const payload: EventFormData = {
+      title: externalEvent.title || "Новое событие",
+      description: externalEvent.description || "Добавлено из поиска по фото",
+      date: externalEvent.date || "",
+      location: externalEvent.location || "",
+      price: externalEvent.price || "Бесплатно",
+      category: externalEvent.category || "Событие",
+      image_url: externalEvent.image_url || "",
+      source_url: externalEvent.source_url || "",
+    };
+
+    await eventsApi.create(payload);
+    await loadEvents();
+    setShowPhotoSearch(false);
+    navigate("/dashboard");
+  };
+
+  const handlePhotoSearchComplete = (eventId: string) => {
+    setShowPhotoSearch(false);
+    navigate(`/events/${eventId}`);
+  };
 
   const handleOnboardingComplete = () => {
     localStorage.setItem("hasSeenOnboarding", "true");
     setShowOnboarding(false);
   };
 
-  const handleFavoriteToggle = (eventId: string) => {
-    setEvents((prev) =>
-      prev.map((e) =>
-        e.id === eventId ? { ...e, isFavorite: !e.isFavorite } : e
-      )
-    );
-  };
-
-  const handleEventClick = (eventId: string) => {
-    setSelectedEventId(eventId);
-    setCurrentView("detail");
-  };
-
-  const handleNavigate = (view: string) => {
-    setCurrentView(view);
-    setSelectedEventId(null);
-  };
-
-  const handlePhotoSearchComplete = (eventId: string) => {
-    setShowPhotoSearch(false);
-    handleEventClick(eventId);
-  };
-
-  const handleExternalEvent = (externalEvent: any) => {
-    // Преобразуем внешнее событие к формату Event
-    const newEvent: Event = {
-      id: externalEvent.id || String(Date.now()),
-      title: externalEvent.title || "Новое событие",
-      date: new Date(externalEvent.date || Date.now()).toLocaleDateString("ru-RU"),
-      time: new Date(externalEvent.date || Date.now()).toLocaleTimeString("ru-RU", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      location: externalEvent.location || "",
-      price: externalEvent.price ?? "—",
-      category: externalEvent.category || "Другое",
-      image: externalEvent.image_url || "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4",
-      isFavorite: false,
-    };
-    
-    setEvents(prev => [...prev, newEvent]);
-    handleEventClick(newEvent.id);
-  };
-
-  const favoriteEvents = events.filter((e) => e.isFavorite);
-  const selectedEvent = events.find((e) => e.id === selectedEventId);
-
-  const similarEvents = selectedEvent
-    ? events
-        .filter(
-          (e) =>
-            e.category === selectedEvent.category &&
-            e.id !== selectedEvent.id
-        )
-        .slice(0, 3)
-    : [];
-
-  // Пока загружается авторизация
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
           <p>Проверка авторизации...</p>
         </div>
       </div>
@@ -168,93 +223,122 @@ export default function App() {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
-        Загрузка событий…
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background">
-      <Header 
-        onAuthClick={() => setShowAuthDialog(true)} 
-        user={user} 
-        onLogout={logout}
-      />
+      <Header onAuthClick={() => setShowAuthDialog(true)} user={user} onLogout={logout} />
+      <Sidebar isAuthenticated={isAuthenticated} role={user?.role} />
 
-      <Sidebar currentView={currentView} onNavigate={handleNavigate} />
-
-      <div className="lg:pl-64 pb-20 lg:pb-8">
-        {currentView === "home" && (
-          <HomePage
-            featuredEvents={events}
-            onPhotoSearchClick={() => setShowPhotoSearch(true)}
-            onEventClick={handleEventClick}
-            onFavoriteToggle={handleFavoriteToggle}
-          />
-        )}
-
-        {currentView === "feed" && (
-          <EventFeed
-            events={events}
-            onEventClick={handleEventClick}
-            onFavoriteToggle={handleFavoriteToggle}
-          />
-        )}
-
-        {currentView === "favorites" && (
-          <Favorites
-            favoriteEvents={favoriteEvents}
-            onEventClick={handleEventClick}
-            onFavoriteToggle={handleFavoriteToggle}
-            onExploreClick={() => handleNavigate("feed")}
-          />
-        )}
-
-        {currentView === "detail" && selectedEvent && (
-          <EventDetail
-            event={selectedEvent}
-            similarEvents={similarEvents}
-            onBack={() => handleNavigate("home")}
-            onFavoriteToggle={() =>
-              handleFavoriteToggle(selectedEvent.id)
+      <div className="pb-20 lg:pl-64 lg:pb-8">
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <HomePage
+                featuredEvents={cardEvents}
+                onPhotoSearchClick={() => (user ? setShowPhotoSearch(true) : setShowAuthDialog(true))}
+                onDiscoverClick={() => navigate("/discover")}
+                onEventClick={(id) => navigate(`/events/${id}`)}
+                onFavoriteToggle={(id) => void (user ? handleFavoriteToggle(id) : setShowAuthDialog(true))}
+              />
             }
-            onSimilarEventClick={handleEventClick}
-            onSimilarFavoriteToggle={handleFavoriteToggle}
           />
-        )}
+          <Route path="/discover" element={<DiscoverPage />} />
+          <Route path="/discover/:eventId" element={<PublicEventDetailPage />} />
+          <Route
+            path="/events"
+            element={
+              user ? (
+                <>
+                  <Seo title="Закрытый каталог — EventFinder" description="Защищённый каталог событий" robots="noindex,nofollow" canonicalPath="/events" />
+                  <EventFeed />
+                </>
+              ) : (
+                <EmptyState
+                  title="Каталог доступен после входа"
+                  description="Для лабораторных по авторизации и защите API каталог подключён к защищённым эндпоинтам. Войдите, чтобы получить события пользователя."
+                  ctaLabel="Войти"
+                  onAction={() => setShowAuthDialog(true)}
+                />
+              )
+            }
+          />
+          <Route
+            path="/events/:eventId"
+            element={
+              <ProtectedRoute>
+                <EventDetailRoute seedEvents={events} currentUser={user} onFavoriteToggle={handleFavoriteToggle} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/favorites"
+            element={
+              user ? (
+                <>
+                  <Seo title="Избранное — EventFinder" description="Избранные события пользователя" robots="noindex,nofollow" canonicalPath="/favorites" />
+                  <Favorites
+                    favoriteEvents={favoriteEvents}
+                    onEventClick={(id) => navigate(`/events/${id}`)}
+                    onFavoriteToggle={(id) => void handleFavoriteToggle(id)}
+                    onExploreClick={() => navigate("/events")}
+                  />
+                </>
+              ) : (
+                <EmptyState
+                  title="Избранное недоступно без авторизации"
+                  description="Сохранение избранных событий привязано к вашему аккаунту и хранится на защищённом API."
+                  ctaLabel="Войти"
+                  onAction={() => setShowAuthDialog(true)}
+                />
+              )
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                {loadingEvents || !user ? (
+                  <EmptyState title="Загрузка панели управления" description="Синхронизируем ваш каталог с API." />
+                ) : (
+                  <>
+                    <Seo title="Панель управления — EventFinder" description="Управление событиями" robots="noindex,nofollow" canonicalPath="/dashboard" />
+                    <ManageEvents
+                      events={events}
+                      currentUserId={user.id}
+                      currentUserRole={user.role}
+                      onCreate={handleCreate}
+                      onUpdate={handleUpdate}
+                      onDelete={handleDelete}
+                    />
+                  </>
+                )}
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute roles={["admin"]}>
+                <div>
+                  <Seo title="Управление ролями — EventFinder" description="Административная панель пользователей" robots="noindex,nofollow" canonicalPath="/admin/users" />
+                  <AdminUsers />
+                </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
       </div>
 
-      <MobileNav currentView={currentView} onNavigate={handleNavigate} />
+      <MobileNav isAuthenticated={isAuthenticated} role={user?.role} />
 
       <AnimatePresence>
-        {showPhotoSearch && (
-          <PhotoSearch
-            onSearchComplete={handlePhotoSearchComplete}
-            onClose={() => setShowPhotoSearch(false)}
-            onExternalEvent={handleExternalEvent}
-          />
+        {showPhotoSearch && user && (
+          <PhotoSearch onSearchComplete={handlePhotoSearchComplete} onClose={() => setShowPhotoSearch(false)} onExternalEvent={handleExternalEvent} />
         )}
       </AnimatePresence>
 
-      <AuthDialog
-        open={showAuthDialog}
-        onClose={() => setShowAuthDialog(false)}
-      />
-      
-      {/* Кнопка для отладки - можно удалить */}
-      <button 
-        onClick={() => {
-          console.log("Current user:", user);
-          console.log("Auth loading:", authLoading);
-          console.log("LocalStorage token:", localStorage.getItem("access_token"));
-        }}
-        className="fixed bottom-4 right-4 bg-blue-500 text-white p-2 rounded z-50 text-sm"
-      >
-        Debug User
-      </button>
+      <AuthDialog open={showAuthDialog} onClose={() => setShowAuthDialog(false)} />
     </div>
   );
 }

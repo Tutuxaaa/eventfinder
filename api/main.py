@@ -1,16 +1,19 @@
 from fastapi import FastAPI
-from endpoints import health, events, search, photo_search
-from database import Base, engine
-from models.event import Event
 from fastapi.middleware.cors import CORSMiddleware
-from endpoints import photo_debug
-from endpoints import scrape
-from endpoints import photo_lookup
-from endpoints import auth
-from auth import hash_password
 
+from database import Base, engine
+from endpoints import health, search
+from endpoints import auth as auth_endpoints
+from endpoints import events, external, photo_debug, photo_lookup, photo_search, public, scrape, seo, users
+from models.event import Event  # noqa: F401
+from models.event_file import EventFile  # noqa: F401
+from models.refresh_token import RefreshToken  # noqa: F401
+from models.user import User  # noqa: F401
+from settings import get_settings
 
-app = FastAPI(title="EventFinder API")
+settings = get_settings()
+
+app = FastAPI(title=settings.app_name, version=settings.app_version)
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,38 +28,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(seo.router, tags=["seo"])
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(events.router, prefix="/api/v1", tags=["events"])
+app.include_router(users.router, prefix="/api/v1", tags=["rbac"])
 app.include_router(search.router, prefix="/api/v1", tags=["search"])
 app.include_router(photo_search.router, prefix="/api/v1", tags=["photo_search"])
-app.include_router(photo_debug.router, prefix="/api/v1")
+app.include_router(photo_debug.router, prefix="/api/v1", tags=["photo_debug"])
 app.include_router(scrape.router, prefix="/api/v1", tags=["scrape"])
 app.include_router(photo_lookup.router, prefix="/api/v1", tags=["photo_lookup"])
-app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
+app.include_router(public.router, prefix="/api/v1", tags=["public"])
+app.include_router(external.router, prefix="/api/v1", tags=["external"])
+app.include_router(auth_endpoints.router, prefix="/api/v1", tags=["auth"])
 
-def create_test_user():
-    # Хешируем пароль
-    hashed_password = hash_password("test123")  # или любой другой пароль
-    
-    # Сохраняем пользователя в БД
-    # Предположим, у вас есть модель User
-    from models.user import User, SessionLocal
-    
-    db = SessionLocal()
-    user = db.query(User).filter(User.username == "mcg").first()
-    
-    if not user:
-        user = User(
-            username="mcg",
-            email="test@example.com",
-            hashed_password=hashed_password
-        )
-        db.add(user)
-        db.commit()
-        print(f"Created user: mcg / test123")
 
 @app.get("/")
 async def root():
-    return {"message": "EventFinder API"}
+    return {"message": settings.app_name, "version": settings.app_version}
+
+
+@app.get("/api/v1")
+async def api_root():
+    return {
+        "name": settings.app_name,
+        "version": settings.app_version,
+        "labs_ready": [1, 2, 3, 4, 5, 6],
+        "features": [
+            "rbac",
+            "access-refresh tokens",
+            "server-side filtering",
+            "event file attachments",
+            "public seo catalog",
+            "external api integration",
+            "automated tests",
+            "containerized deployment",
+        ],
+    }
+
 
 Base.metadata.create_all(bind=engine)

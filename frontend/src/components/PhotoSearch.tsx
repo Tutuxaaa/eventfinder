@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Upload, Camera, X, Sparkles, Check, ExternalLink, Edit3, Calendar, MapPin, Info } from "lucide-react";
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import api from "../api";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";

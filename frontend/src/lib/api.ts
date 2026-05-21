@@ -1,54 +1,86 @@
-// frontend/src/lib/api.ts
-export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000/api/v1";
+const rawBase = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "http://localhost:8000";
+export const API_BASE = rawBase.endsWith("/api/v1") ? rawBase : `${rawBase.replace(/\/$/, "")}/api/v1`;
 
-let runtimeToken: string | null = null;
-export function setRuntimeToken(token: string | null) {
-  runtimeToken = token;
-  if (token) localStorage.setItem("access_token", token);
+let runtimeAccessToken: string | null = null;
+let runtimeRefreshToken: string | null = null;
+
+export function setRuntimeTokenPair(accessToken: string | null, refreshToken: string | null) {
+  runtimeAccessToken = accessToken;
+  runtimeRefreshToken = refreshToken;
+  if (accessToken) localStorage.setItem("access_token", accessToken);
   else localStorage.removeItem("access_token");
-}
-export function getRuntimeToken(): string | null {
-  // prefer in-memory token (avoids race with localStorage writes)
-  if (runtimeToken) return runtimeToken;
-  return localStorage.getItem("access_token");
+  if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
+  else localStorage.removeItem("refresh_token");
 }
 
-export async function apiFetch(path: string, opts: RequestInit = {}, token?: string | null) {
-  const theToken = token ?? getRuntimeToken();
+export function clearStoredAuth() {
+  setRuntimeTokenPair(null, null);
+}
+
+export function getAccessToken(): string | null {
+  return runtimeAccessToken || localStorage.getItem("access_token");
+}
+
+export function getRefreshToken(): string | null {
+  return runtimeRefreshToken || localStorage.getItem("refresh_token");
+}
+
+export async function refreshSession(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+
+  const response = await fetch(`${API_BASE}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+
+  if (!response.ok) {
+    clearStoredAuth();
+    return false;
+  }
+
+  const payload = await response.json();
+  setRuntimeTokenPair(payload.access_token, payload.refresh_token);
+  return true;
+}
+
+export async function apiFetch(path: string, opts: RequestInit = {}, token?: string | null, retryOn401 = true) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const theToken = token ?? getAccessToken();
   const headers = new Headers(opts.headers || {});
-  // If body is FormData or URLSearchParams, do not set JSON header
   const body = opts.body;
-  if (!(body instanceof FormData) && !(body instanceof URLSearchParams)) {
-    if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+
+  if (!(body instanceof FormData) && !(body instanceof URLSearchParams) && body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
   if (theToken) headers.set("Authorization", `Bearer ${theToken}`);
-  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers, credentials: "omit" });
 
-  // global 401 handling: throw so caller can logout
-  if (res.status === 401) {
-    const errText = await res.text().catch(()=>"Unauthorized");
-    const err = new Error("Unauthorized: " + errText);
-    // attach status for more context
-    (err as any).status = 401;
-    throw err;
+  const res = await fetch(`${API_BASE}${normalizedPath}`, {
+    ...opts,
+    headers,
+    credentials: "omit",
+  });
+
+  if (res.status === 401 && retryOn401 && !normalizedPath.startsWith("/auth/")) {
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      return apiFetch(normalizedPath, opts, undefined, false);
+    }
   }
+
+  if (res.status === 204) return null;
 
   const contentType = res.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    const data = await res.json();
-    if (!res.ok) {
-      const err = new Error(data.detail || JSON.stringify(data));
-      (err as any).status = res.status;
-      throw err;
-    }
-    return data;
-  } else {
-    if (!res.ok) {
-      const txt = await res.text().catch(()=>"Error");
-      const err = new Error(txt);
-      (err as any).status = res.status;
-      throw err;
-    }
-    return res;
+  const isJson = contentType.includes("application/json");
+  const payload = isJson ? await res.json() : await res.text();
+
+  if (!res.ok) {
+    const message = isJson ? payload.detail || JSON.stringify(payload) : payload || `HTTP ${res.status}`;
+    const error = new Error(message);
+    (error as Error & { status?: number }).status = res.status;
+    throw error;
   }
+
+  return payload;
 }
