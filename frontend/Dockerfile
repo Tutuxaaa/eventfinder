@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 ARG VITE_API_BASE=/api/v1
 ENV VITE_API_BASE=${VITE_API_BASE}
-RUN npm ci
+RUN npm ci --include=dev
 COPY . .
 RUN chmod +x node_modules/@esbuild/linux-x64/bin/esbuild || true
 RUN npm run build
