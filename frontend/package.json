@@ -66,6 +66,7 @@
     "build": "node ./node_modules/vite/bin/vite.js build",
     "preview": "node ./node_modules/vite/bin/vite.js preview --host 0.0.0.0 --port 3000",
     "test": "vitest run",
+    "test:ci": "node ./node_modules/vitest/vitest.mjs run",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit --noCheck"
   }
